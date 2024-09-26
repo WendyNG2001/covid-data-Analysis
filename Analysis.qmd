@@ -1,0 +1,728 @@
+---
+title: "Covid Data Analysis"
+author: ""
+output: pdf
+editor: visual
+---
+
+# Section A
+
+## Part A: Figure reproduction
+
+-   Missing values, represented as NA in R, are replaced with 0 to ensure numerical operations can be performed without issues.
+
+-   Every second row, which is empty in the csv file, is removed to further clean the data.
+
+-   The date column in is then transformed. It is converted from a string to a Date object
+
+-   A custom function is then defined to create date breaks at the start of every quarter. This function will be used when plotting the data to ensure the x-axis, which represents time, is broken down into readable intervals.
+
+-   This plot visualizes the daily vaccinations, with the date on the x-axis and the number of vaccinations on the y-axis.
+
+-   This timestamp indicates when the plot was last updated, providing a reference point for the data’s recency. 
+
+### Figure 1: Daily Vaccinations
+
+```{r}
+#|echo: true
+#| warning: false
+#| include: true
+
+library(tidyverse)
+library(lubridate)
+library(scales)
+library(grid)
+
+covid_data<- read.csv("cumulative-case-data.csv")
+clean_covid_data1<- replace(covid_data, is.na(covid_data), 0)
+
+
+#removing every 2nd row in the data because it empty 
+NewCovid_data<-clean_covid_data1[-seq(2, nrow(clean_covid_data1), by = 2), ] 
+
+#changing the format of the date 
+NewCovid_data$date <- as.Date(NewCovid_data$date, format = "%d-%m-%Y")
+
+date_breaks_quarters <- function(width = 1) {
+  function(x) {
+    breaks <- seq.Date(from = floor_date(x[1], "year"), 
+                       to = ceiling_date(x[2], "year"), 
+                       by = paste(width, "months"))
+    breaks[month(breaks) %% 3 == 1]
+  }
+}
+
+
+daily_Vaccinations<- ggplot(NewCovid_data, aes(x = date, y = vaccinated_daily)) +
+  geom_bar(stat = "identity", fill = "purple") +
+  scale_x_date(breaks = date_breaks_quarters(1), labels = date_format("%d %b")) +
+  scale_y_continuous(labels = comma) +
+  labs(title = "Daily vaccinations", x = "", y = "") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", color = "white"), 
+        axis.title = element_text(face = "bold", color = "white"), 
+        axis.text = element_text(face = "bold", color = "white"), 
+        panel.background = element_rect(fill = "darkblue"),
+        plot.background = element_rect(fill = "darkblue"),
+        panel.grid.major.x = element_blank(),
+        panel.grid.major.y = element_line(color = "lightgray", linetype = "dashed"),
+        panel.grid.minor = element_blank()) 
+
+daily_Vaccinations
+
+timestamp <- as.POSIXct(Sys.time())
+grid.text(paste("Updated:", format(timestamp, "%d %B %Y")), x = 0.02, y = 0.02, just = "left", gp = gpar(col = "white", fontface = "bold"))
+
+```
+
+### Figure 2: Daily Confirmed cases
+
+-   **`level`**: This column contains the lockdown levels. The levels are represented as integers (5, 4, 3, 2, 1) with 5 being the strictest level and 1 being the least strict. The sequence of levels in the code represents the order in which they were implemented.
+
+-   The code then iterates over the lockdown levels data. For each lockdown level, it adds a text annotation at the start date of the level and draws two vertical dashed lines at the start and end dates of the level.
+
+-   A seven-day rolling average of the daily confirmed cases is calculated and added to the plot as a red line.
+
+    ![](images/clipboard-3969818779.png)
+
+```{r}
+#| echo: true
+#| warning: false
+#| include: true
+#| error: true
+
+library(ggplot2)
+library(scales)
+library(lubridate)
+library(grid)
+
+data2<- read.csv("cumulative-case-data.csv")
+data3<- replace(data2, is.na(data2), 0)
+data$date <- as.Date(data$date, format = "%d-%m-%Y")
+
+#lockdown levels 
+levels_data <- data.frame(
+  level = c(5, 4, 3, 2, 1, 3, 1, 2, 3, 4, 3, 2, 1),
+  date_from = as.Date(c("2020-03-26", "2020-05-01", "2020-06-01", "2020-08-18",
+                        "2020-09-21", "2020-12-29", "2021-03-01", "2021-05-31",
+                        "2021-06-16", "2021-06-28", "2021-07-26", "2021-09-13",
+                        "2021-10-01")),
+  date_to = as.Date(c("2020-04-30", "2020-05-31", "2020-08-17", "2020-09-20",
+                      "2020-12-28", "2021-02-28", "2021-05-30", "2021-06-15",
+                      "2021-06-27", "2021-07-25", "2021-09-12", "2021-09-30",
+                      "2022-04-04")))
+
+
+# Create the base plot
+p <- ggplot(data, aes(x = date, y = cases_daily)) +
+  geom_area(fill = "purple") +  
+  geom_line(color = "blue") +  
+  scale_x_date(breaks = date_breaks_quarters(1), labels = date_format("%d %b")) +
+  labs(title = "Daily Confirmed Cases",
+       x = "",
+       y = "") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", color = "white"), 
+        axis.title = element_text(face = "bold", color = "white"), 
+        axis.text = element_text(face = "bold", color = "white"), 
+        panel.background = element_rect(fill = "darkblue"),
+        plot.background = element_rect(fill = "darkblue"), 
+        panel.grid.major.x = element_blank(),
+        panel.grid.major.y = element_line(color = "lightgray", linetype = "dashed"),
+        panel.grid.minor = element_blank()) 
+
+#iterating over lockdown levels
+for (i in 1:nrow(levels_data)) {
+  level <- levels_data$level[i]
+  date_from <- levels_data$date_from[i]
+  date_to <- levels_data$date_to[i]
+  label <- paste("Level", level, sep = " ")  
+  p <- p + annotate("text", x = date_from, y = max(data$cases_daily, na.rm = TRUE), label = label, hjust = 1, color = "white")  
+  p <- p + geom_vline(xintercept = date_from, linetype = "dashed", color = "gray40")
+  p <- p + geom_vline(xintercept = date_to, linetype = "dashed", color = "gray40")
+}
+
+# Calculate seven-day rolling average
+data$seven_day_average <- zoo::rollmean(data$cases_daily, k = 7, fill = NA)
+
+# Add rolling average line (red)
+p <- p + geom_line(aes(x = date, y = seven_day_average), color = "red")
+
+# Display the plot
+p
+
+timestamp <- as.POSIXct(Sys.time())
+grid.text(paste("Updated:", format(timestamp, "%d %B %Y")), x = 0.02, y = 0.02, just = "left", gp = gpar(col = "white", fontface = "bold")) 
+
+```
+
+### Figure 3: Active Case Total By Day
+
+-   The x-axis represents the date and the y-axis represents the daily confirmed cases.
+
+-   The **`scale_x_date`** function is used to format the x-axis labels to show the date in “%d %b” format. The breaks on the x-axis are set to start of every quarter using the **`date_breaks_quarters`** function.
+
+```{r}
+
+#| echo: true
+#| warning: false
+#| include: true
+#| error: true
+
+library(tidyverse)
+library(readr)
+library(lubridate)
+library(scales)
+library(grid)
+
+covid_data<- read.csv("cumulative-case-data.csv")
+clean_covid_data1<- replace(covid_data, is.na(covid_data), 0)
+NewCovid_data<-clean_covid_data1[-seq(2, nrow(clean_covid_data1), by = 2), ]
+
+#new date 
+NewCovid_data$date <- as.Date(NewCovid_data$date, format = "%d-%m-%Y")
+
+date_breaks_quarters <- function(width = 1) {
+  function(x) {
+    breaks <- seq.Date(from = floor_date(x[1], "year"), 
+                       to = ceiling_date(x[2], "year"), 
+                       by = paste(width, "months"))
+    breaks[month(breaks) %% 3 == 1]
+  }
+}
+
+# Create the base plot
+Active_cases_by_day <- ggplot(NewCovid_data, aes(x=date, y=NewCovid_data$cases_daily)) +
+  geom_area(fill="orange") +  
+  scale_x_date(breaks = date_breaks_quarters(1), labels = date_format("%d %b")) +
+  labs(title="Active case total by day", x="", y="") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", color = "white"),
+        axis.title = element_text(face = "bold", color = "white"), 
+        axis.text = element_text(face = "bold", color = "white"), 
+        panel.background = element_rect(fill = "darkblue"),
+        plot.background = element_rect(fill = "darkblue"), 
+        panel.grid.major.x = element_blank(), 
+        panel.grid.major.y = element_line(color = "lightgray", linetype = "dashed"),
+        panel.grid.minor = element_blank()) 
+
+Active_cases_by_day
+
+timestamp <- as.POSIXct(Sys.time())
+grid.text(paste("Updated:", format(timestamp, "%d %B %Y")), x = 0.02, y = 0.02, just = "left", gp = gpar(col = "white", fontface = "bold")) 
+```
+
+### Figure 4: Daily Case Trends
+
+-   Two csv files are joined, cumulative case data and province_data
+
+-   The cleaned **`covid_data`** and **`provincial_data`** are joined on the “date” column.
+
+-   Several columns are removed from the joined data, to reduce the number of insignificant columns so that the file is easier to manage.
+
+-   The unique region names are extracted from the **`subregion1_name`** column of the joined data.
+
+-   The script then iterates over each region. For each region, it subsets the data for that region and creates a line plot of the new confirmed cases over time.
+
+-   This visualization can provide valuable insights into how the number of new confirmed COVID-19 cases has been changing over time in different regions.
+
+```{r}
+#| echo: true
+#| warning: false
+#| include: true
+
+
+library(tidyverse)
+library(readr)
+library(grid)
+library(lubridate)
+library(ggplot2)
+library(dplyr)
+library(scales)
+library(gridExtra)
+
+covid_data<- read.csv("cumulative-case-data.csv")
+clean_covid_data1<- replace(covid_data, is.na(covid_data), 0)
+NewCovid_data<-clean_covid_data1[-seq(2, nrow(clean_covid_data1), by = 2), ]
+NewCovid_data$date <- as.Date(NewCovid_data$date, format = "%d-%m-%Y")
+provincial_data<- read.csv("province_data.csv")
+clean_prov_data<- replace(provincial_data, is.na(provincial_data), 0)
+
+clean_prov_data$date <- as.Date(clean_prov_data$date, format = "%Y-%m-%d")
+
+# Filter the data to keep only the entries after 03-04-2020
+provincialData <- filter(clean_prov_data, date > as.Date("2020-03-04", format = "%Y-%m-%d")) 
+
+
+
+#joining Data
+joined_data<- inner_join(NewCovid_data,provincialData, by="date")
+
+data <- joined_data %>% select(-c(seven_day_positives, seven_day_positives,
+                                  maximum_temperature_celsius, minimum_temperature_celsius, mobility_transit_stations,
+                                  wikidata_id, place_id, latitude, longitude, iso_3166_1_alpha_2,
+                                  iso_3166_1_alpha_3,country_code,subregion1_code,openstreetmap_id,elevation_m,mobility_grocery_and_pharmacy,
+                                  mobility_parks,mobility_residential, mobility_workplaces, rainfall_mm, relative_humidity, area_sq_km,mobility_retail_and_recreation,
+                                  dew_point, location_key
+))
+
+regions <- unique(data$subregion1_name)
+
+last_date <- max(data$date)
+start_date <- last_date - months(8)
+data <- data %>% filter(date >= start_date & date <= last_date)
+
+#list to store plots
+plots <- list()
+
+for (i in 1:length(regions)) {
+  region_data <- subset(data, subregion1_name == regions[i])
+  
+  p <- ggplot(region_data, aes(x = date, y = new_confirmed)) +
+    geom_line(color = "red", size = 0.7) +
+    scale_x_date(breaks = c(min(region_data$date), max(region_data$date)), 
+                 labels = date_format("%d%b")) +
+    labs(x = "", y = "",
+         title = regions[i]) +
+    theme(plot.title = element_text(hjust = 0.1, face = "bold", color = "white"),
+          axis.title = element_text(face = "bold", color = "white"),
+          axis.text.y = element_blank(),
+          axis.text.x = element_text(face = "bold", color = "white"), 
+          panel.background = element_rect(fill = "darkblue"),
+          plot.background = element_rect(fill = "darkblue"), 
+          panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank()) 
+  plots[[i]] <- p
+}
+grid.arrange(grobs = plots, ncol = 5)
+
+```
+
+### Figure 5: Cases vs Active cases
+
+-   This visualization is important because it allows for easy identification of of trends in covid-19 over time
+
+```{r}
+#| echo: true
+#| warning: false
+#| include: true
+
+library(tidyverse)
+library(ggplot2)
+library(lubridate)
+library(scales)
+library(grid)
+
+covid_data<- read.csv("cumulative-case-data.csv")
+clean_covid_data1<- replace(covid_data, is.na(covid_data), 0)
+NewCovid_data<-clean_covid_data1[-seq(2, nrow(clean_covid_data1), by = 2), ]
+NewCovid_data$date <- as.Date(NewCovid_data$date, format = "%d-%m-%Y")
+
+
+# Create the base plot
+active_cases_plot <- ggplot(NewCovid_data, aes(x = date)) +
+  geom_line(aes(y = cumulative_cases, color = "Confirmed Cases"), size = 1) +
+  geom_line(aes(y = active_cases, color = "Active Cases"), size = 1) +
+  geom_text(data = tail(NewCovid_data, 1), aes(y = cumulative_cases, label = cumulative_cases),vjust = -0.2) +
+  geom_text(data = tail(NewCovid_data, 1), aes(y = active_cases, label = active_cases), vjust = -0.8) +
+  scale_color_manual(values = c("Confirmed Cases" = "red", "Active Cases" = "green")) +
+  scale_x_date(labels = date_format("%d/%m"), breaks = "1 year") +
+  scale_y_continuous(labels = comma) +
+  labs(x = "", y = "", color = "",
+       title = "Cases vs. Active Cases") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", color = "white"), 
+        axis.title = element_text(face = "bold", color = "white"), 
+        axis.text = element_text(face = "bold", color = "white"), 
+        panel.background = element_rect(fill = "darkblue"),
+        plot.background = element_rect(fill = "darkblue"), 
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        legend.position = c(0.3, 0.8),
+        legend.background = element_rect(fill = "darkblue"),
+        legend.key = element_rect(fill = "darkblue"),
+        legend.text = element_text( size = 8, color = "white")) 
+
+active_cases_plot
+
+timestamp <- as.POSIXct(Sys.time())
+grid.text(paste("Updated:", format(timestamp, "%d %B %Y")), x = 0.02, y = 0.02, just = "left", gp = gpar(col = "white", fontface = "bold")) 
+
+
+```
+
+### Figure 6: Provincial infections per 100,000 population.
+
+-   The script then groups the data by province and calculates the sum of new confirmed cases for each province. This summarized data is ordered by the number of new confirmed cases.
+
+-   A bar plot is created using `ggplot`, with the x-axis representing the provinces and the y-axis representing the number of new confirmed cases.
+
+```{r}
+#| echo: true
+#| message: false
+#| include: true
+
+library(tidyverse)
+library(readr)
+library(grid)
+library(lubridate)
+library(scales)
+
+covid_data<- read.csv("cumulative-case-data.csv")
+clean_covid_data1<- replace(covid_data, is.na(covid_data), 0)
+NewCovid_data<-clean_covid_data1[-seq(2, nrow(clean_covid_data1), by = 2), ]
+NewCovid_data$date <- as.Date(NewCovid_data$date, format = "%d-%m-%Y")
+
+provincial_data<- read.csv("province_data.csv")
+
+Provinces <- unique(data$subregion1_name)
+
+# Order data by cumulative confirmed cases
+data_order <- data %>%
+  group_by(subregion1_name) %>%
+  summarise(new_confirmed = sum(new_confirmed))
+
+barplot <- ggplot(data_order) +
+  geom_bar(aes(x=reorder(subregion1_name,new_confirmed), y=new_confirmed), stat="identity", fill="orange") +
+  geom_text(aes(x=reorder(subregion1_name,new_confirmed), y=new_confirmed, label=new_confirmed), hjust=-0.01, color = "white") +
+  labs(title="Provincial infections per 100,000 population", x="", y="") +
+  theme_minimal() +
+  theme(axis.text.x=element_blank(), 
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        plot.background = element_rect(fill = "darkblue"), 
+        panel.background = element_rect(fill = "darkblue"),
+        text = element_text(face = "bold", color = "white"),
+        plot.title = element_text(color = "white"),
+        axis.title = element_text(color = "white"),
+        panel.border = element_blank()) +  
+  coord_flip()
+barplot
+
+timestamp <- as.POSIXct(Sys.time())
+grid.text(paste("Updated:", format(timestamp, "%d %B %Y")), x = 0.02, y = 0.02, just = "left", gp = gpar(col = "white", fontface = "bold"))
+
+```
+
+## Part B: Figure Documentation
+
+### Figure 1: Deaths Per Quarter
+
+-   The script starts by loading a CSV file named “covid-data.csv” into a dataframe. It then replaces any NA values in the data with 0. The date column in the cleaned data is converted to a Date object.
+
+-   The data is filtered to include only records where the continent is ‘Africa’ and the date is before January 1, 2023. This reduces the size of the dataset for easier processing.
+
+-   A bar plot is created using **`ggplot`**, with the x-axis representing the quarter and the y-axis representing the number of new deaths. The bars are filled with steel blue color.
+
+-   The importance of this visualization lies in its ability to provide insights into the progression of the COVID-19 pandemic in Africa. 
+
+-   This can be useful for understanding the impact of the pandemic in the African continent.
+
+```{r}
+#| echo: true
+#| warning: false
+#| include: true
+
+
+library(dplyr)
+library(ggplot2)
+library(maps)
+library(lubridate)
+library(scales)
+
+world_data_raw<-read.csv("covid-data.csv")
+world_data<- replace(world_data_raw, is.na(world_data_raw), 0)
+world_data$date <- as.Date(world_data$date, format = "%Y-%m-%d")
+
+Africa<-filter(world_data, continent == 'Africa' & date<"2023-01-01")  #filter to Africa and date filter to reduce size of dataset 
+
+Africa$quarter <- paste(year(Africa$date), quarter(Africa$date), sep="-Q")
+
+# Calculate daily deaths per quarter
+deaths_per_quarter <- aggregate(new_deaths ~ quarter, Africa, sum)
+
+deaths_per_q <- ggplot(deaths_per_quarter, aes(x = quarter, y = new_deaths)) +
+  geom_col(fill = 'steelblue') +
+  labs(x = "", y = "", title = "Daily Deaths per Quarter in Africa") +
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank())
+deaths_per_q
+```
+
+### Figure 2: Global Distribution of Confirmed COVID-19 Cases.
+
+-   The script combines two csv files, one which contains covid-19 data and the other one has ordinates of all the countries in the world.
+
+-   The script groups the global data by country and calculates the sum of confirmed cases for each country. This summarized data is stored in `aggregate_data`
+
+-   A color palette is created for the bubbles in the plot using the **`colorNumeric`** function from the **`viridis`** package.
+
+-   An intercative bubble map is created using the `leaflet` function.
+
+-   The size of the circle markers is determined by the logarithm of the total confirmed cases,
+
+-   A hover effect is added when upon hovering above a bubble the countries name and total confirmed cases pop up.
+
+-   The importance of this visualization lies in its ability to provide a global view of the COVID-19 pandemic. By mapping the total confirmed cases for each country, it allows for a direct comparison of the impact of the pandemic across different countries.
+
+```{r}
+#| echo: true
+#| warning: false
+#| include: true
+
+library(tidyverse)
+library(viridis)
+library(leaflet)
+
+global_data<-read.csv('global_covid2020.csv')
+global_data1<- replace(global_data, is.na(global_data), 0)
+global_data1$date <- as.Date(global_data1$Date, format = "%Y-%m-%d")
+
+corodinates<-read.csv("location.csv") #scv file with longitude and latitude,etc 
+corodinates2<- corodinates%>%
+rename(Country = Country)
+
+# Aggregate data by region
+aggregate_data <- global_data1 %>%
+  group_by(Country) %>%
+  summarise(Total_Confirmed_Cases = sum(`Confirmed.Cases`, na.rm = TRUE))
+
+joined_data<- inner_join(aggregate_data,corodinates, by="Country")
+
+# Create a color palette for the bubbles
+pal <- colorNumeric("viridis", domain = aggregate_data$Total_Confirmed_Cases)
+leaflet(joined_data) %>%
+  addTiles() %>%
+  addCircleMarkers(lng = ~Longitude, lat = ~Latitude, weight = 1,
+                   radius = ~log(Total_Confirmed_Cases + 0.2),  #logarithmic scale for bubble sizes
+                   fillColor = ~pal(Total_Confirmed_Cases), fillOpacity = 0.1, color = "white",
+                   label = ~paste0(Country, ": ", Total_Confirmed_Cases, " cases"),  # Display country and cases when hovering
+                   labelOptions = labelOptions(direction = "auto"))
+
+
+```
+
+### Figure 3: Virus spread in America
+
+-   This script loads, cleans, and visualizes COVID-19 case data for North and South America.
+
+-   It creates a line plot showing the number of new cases per month for each continent in the year 2020.
+
+-   resulting plot provides a comparison of the virus spread in North and South America over time.
+
+```{r}
+#| echo: true
+#| warning: false
+#| include: true
+#| error: true
+
+
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(scales)
+library(tidyverse)
+
+world_data_raw<-read.csv("covid-data.csv")
+world_data<- replace(world_data_raw, is.na(world_data_raw), 0)
+world_data$date <- as.Date(world_data$date, format = "%Y-%m-%d")
+America_data <- filter(world_data, continent %in% c('North America', 'South America') & date <= "2021-01-01")
+America_data$month_year <- format(America_data$date, "%b %Y")
+
+# Calculate new cases per month
+cases_per_month <- aggregate(new_cases ~ month_year + continent, America_data, sum)
+
+plot<- ggplot(cases_per_month, aes(x = month_year, y = new_cases, group=continent, color = continent)) +
+  geom_line(size = 1) +
+  scale_color_manual(values = c("North America" = "red", "South America" = "green")) +
+  scale_y_continuous(labels = comma) +  # Use comma format for y axis
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+        legend.position = "bottom", 
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        axis.title = element_text(face = "bold"), 
+        axis.text = element_text(face = "bold"),
+        legend.text = element_text(face = "bold"))
+  labs(x = "", y = "", color = "", title = "Virus Spread in America in 2020")
+plot
+
+```
+
+### Figure 4: Deaths and Cases in Europe
+
+-   The **`summary_data`** is reshaped for plotting using the **`pivot_longer`** function from the **`tidyr`** package. This transforms the data from a wide format to a long format, where the ‘deaths’ and ‘cases’ columns are combined into a single ‘variable’ column and their values are stored in a new ‘value’ column.
+
+-   It creates a bar plot showing the number of deaths and cases per quarter.
+
+-   The resulting plot provides a comparison of the cases and death in Europe to show how well Europe handled the covid-19 virus outbreak.
+
+```{r}
+#| echo: true
+#| warning: false
+#| include: true
+
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(scales)
+library(tidyverse)
+
+world_data_raw<-read.csv("covid-data.csv")
+world_data<- replace(world_data_raw, is.na(world_data_raw), 0)
+world_data$date <- as.Date(world_data$date, format = "%Y-%m-%d")
+Europe_data <- filter(world_data, continent == 'Europe' & date<"2023-01-01")
+
+Europe_data$quarter_year <- paste("Q", quarter(Europe_data$date), year(Europe_data$date), sep=" ")
+
+# Calculating total deaths and cases per quarter
+summary_data <- Europe_data %>%
+  group_by(quarter_year) %>%
+  summarise(deaths = sum(total_deaths), cases = sum(total_cases))
+
+# Reshaping the data for plotting
+plot_data <- tidyr::pivot_longer(summary_data, c(deaths, cases), names_to = "variable", values_to = "value")
+
+ggplot(plot_data, aes(x = quarter_year, y = value, fill = variable)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("deaths" = "red", "cases" = "blue")) +
+  scale_y_continuous(labels = scales::comma) +  
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+        legend.position = "bottom",  
+        plot.title = element_text(hjust = 0.5)) + 
+  labs(x = "Quarter", y = "Count", fill = "Metric", title = "Deaths and Cases in Europe per Quarter")
+
+
+```
+
+### Figure 5: Hospitalization and Fatalities
+
+```{r}
+#| echo: true
+#| warning: false
+#| include: true
+
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(scales)
+library(tidyverse)
+
+world_data_raw<-read.csv("covid-data.csv")
+world_data<- replace(world_data_raw, is.na(world_data_raw), 0)
+world_data$date <- as.Date(world_data$date, format = "%Y-%m-%d")
+Europe_data <- filter(world_data, continent == 'Europe' & date<"2023-01-01")
+
+Europe_data$month_year <- format(Europe_data$date, "%b %Y")
+
+# Calculate total deaths and vaccinations per month
+summary_data <- Europe_data %>%
+  group_by(month_year) %>%
+  summarise(hospitilised= sum(hosp_patients), deaths = sum(new_deaths))
+
+ggplot(summary_data, aes(x = deaths, y = hospitilised )) +
+  geom_point() +
+  geom_smooth(method = lm , color = "red", se = FALSE) +
+  scale_y_continuous(labels = scales::comma) + 
+  scale_x_continuous(labels = comma) +
+  labs(x = "Vaccinations", y = "Deaths", title = "COVID-19 in Europe: Hospitalizations vs. Fatalities") +
+  theme_minimal() +  
+  theme(panel.grid.major = element_blank(),  
+        panel.grid.minor = element_blank(),  
+        text = element_text(face = "bold"),  
+        plot.title = element_text(hjust = 0.5)) 
+
+```
+
+### Figure 6: Covid-19 Deaths by Age group
+
+-   This plot visualises covid-19 deaths by age group.
+
+-   This is too see which age group was mostly was mostly affected by the virus.
+
+```{r}
+#| echo: true
+#| warning: false
+#| include: true
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(scales)
+library(tidyverse)
+
+newData<-read.csv("covidCase.csv")
+newData<- replace(newData, is.na(newData), 0)
+
+newData <- newData %>%
+  group_by(sex, age_group) %>%
+  summarise(total_deaths = sum(death_count_suppressed))
+
+# Filter out "Overall" from 'age_group'
+age_group_death_filtered <- newData %>%
+  filter(age_group != "Overall")
+
+#a contrasting color palette with 10 colors
+my_colors <- c("#FF9999", "#66B3FF", "#99FF99", "#FFCC99", "#FFD700",
+               "#618350", "#8A2BE2", "#32CD32", "#FF4500", "#FF69B4")
+
+ggplot(age_group_death_filtered, aes(x = "", y = total_deaths, fill = age_group)) +
+  geom_bar(stat = "identity") +
+  coord_polar(theta = "y") +
+  labs(title = "COVID-19 Deaths by Age Group",
+       fill = "Age Group") +
+  theme_minimal() +
+  scale_fill_manual(values = my_colors) +
+  theme_void() +  # Remove labels
+  theme(plot.title = element_text(hjust = 0.5)) 
+  guides(fill = guide_legend(reverse = TRUE))  
+
+
+```
+
+### Figure 7: Covid-19 Cases by Gender and Ethnicity
+
+-   This visualizes the gender and race that contracted the virus more
+
+```{r}
+#| echo: true
+#| warning: false
+#| include: true
+
+
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(scales)
+library(tidyverse)
+
+newData<-read.csv("covidCase.csv")
+newData<- replace(newData, is.na(newData), 0)
+
+case_counts <- newData %>%
+  group_by(race_ethnicity_combined, sex) %>%
+  summarise(total_cases = sum(case_count_suppressed))
+
+case_counts_filtered <- case_counts %>%
+  filter(sex != "Overall", race_ethnicity_combined!= "Overall")
+
+ggplot(case_counts_filtered, aes(x = race_ethnicity_combined, y = total_cases, fill = sex)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_y_continuous(labels = comma) + 
+  labs(title = "COVID-19 Cases by Ethnicity and Gender",
+       x = "Ethnicity", y = "Total Cases",
+       fill = "Gender") +
+  theme_minimal() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    text = element_text(face = "bold"),
+    plot.title = element_text(size = 14),
+    axis.title = element_text(size = 12)
+  )
+
+```
+
+## References
+
+<https://health.google.com/covid-19/open-data/raw->
+
+<https://data.who.int/dashboards/covid19/data?n=o>
+
+<https://raw.githubusercontent.com/google/dspl/master/samples/google/canonical/countries.csv>
